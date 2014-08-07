@@ -4,8 +4,8 @@
  * Abstract type: packet queue 
  */
 
-// A packet fragment is an (address, size) tuple
-type Fragment    = Tuple2[Int, Int]
+// A packet fragment
+case class Fragment(addr : Int, size : Int)
 
 // A packet consists of 1 or more fragments
 type Packet      = List[Fragment]
@@ -21,30 +21,30 @@ def absPush (q : PacketQueue, p : Packet) : PacketQueue = q :+ p
  * Concrete type: flattened list of buffer descriptors 
  */
 
-// DMA descriptor stores a single packet fragment, as a four-tuple (address, size, last, own), 
-// where _last_ is true for the last fragment of a packet, and _own_ is true if the descriptor
+// DMA descriptor stores a single packet fragment
+// _islast_ is true for the last fragment of a packet, and _own_ is true if the descriptor
 // is owned by the device.
-type Descr = Tuple4[Int, Int, Boolean, Boolean]
+case class Descr(addr : Int, size : Int, islast : Boolean, own : Boolean)
 
 // DMA circular buffer: (buffer, start index, end index)
-type DMACB = (Vector[Descr], Int, Int)
+case class DMACB (buf : Vector[Descr], start : Int, end : Int)
 
 /* Concrete mutators */
 
-def setDescr (q : DMACB, i : Int, d : Descr) : DMACB = (q._1.updated(i, d), q._2, q._3)
-def advanceLast  (q : DMACB, i : Int) : DMACB        = (q._1, q._2, (q._3 + i) % q._1.length)
+def setDescr (q : DMACB, i : Int, d : Descr) : DMACB = DMACB(q.buf.updated(i, d), q.start, q.end)
+def advanceLast  (q : DMACB, i : Int) : DMACB        = DMACB(q.buf, q.start, (q.end + i) % q.buf.length)
 
 /*
  * Semantic function: maps a concrete instance to an abstract one
  */
 
-def sem(q : DMACB) : PacketQueue = doSem(q._1, q._2, q._2, Nil)
+def sem(q : DMACB) : PacketQueue = doSem(q.buf, q.start, q.start, Nil)
 
 // Scan the input descriptor list until reaching either the end of 
 // the list or a descriptor with own flag set to false.
 def doSem(q : Vector[Descr], start : Int, idx : Int, frags : List[Fragment]) : PacketQueue = {
-    val (addr, sz, lst, own) = q(idx)
-    val pkt = frags :+ (addr, sz)
+    val Descr(addr, sz, lst, own) = q(idx)
+    val pkt = frags :+ Fragment(addr, sz)
     val nxtidx = (idx + 1) % q.length
     assert (!own || nxtidx != start)
     (lst, own) match {
@@ -56,9 +56,8 @@ def doSem(q : Vector[Descr], start : Int, idx : Int, frags : List[Fragment]) : P
 }
 
 def consistent (cb : DMACB) : Boolean = {
-    val (q, start, end) = cb
-    ((start != end) && q(start)._4 && consistent ((q, (start + 1) % q.length, end))) || 
-    ((start == end) && !q(start)._4)
+    ((cb.start != cb.end) && cb.buf(cb.start).own && consistent (DMACB(cb.buf, (cb.start + 1) % cb.buf.length, cb.end))) || 
+    ((cb.start == cb.end) && !cb.buf(cb.start).own)
 }
 
 
@@ -79,12 +78,12 @@ def consistent (cb : DMACB) : Boolean = {
  */
 def concPush (q : DMACB, p : Packet) : DMACB = {
     require(!p.isEmpty, "empty packet");
-    require(p.length < q._1.length - ((q._3 - q._2) % q._1.length), "packet too long");
+    require(p.length < q.buf.length - ((q.end - q.start) % q.buf.length), "packet too long");
     require (consistent(q), "queue in inconsistent state")
-    val ((addr, len), idx) :: rest = p.zipWithIndex.reverse
-    val q1 = setDescr (q, (q._3 + idx) % q._1.length, (addr, len, true, true))
+    val (Fragment(addr, len), idx) :: rest = p.zipWithIndex.reverse
+    val q1 = setDescr (q, (q.end + idx) % q.buf.length, Descr(addr, len, true, true))
     val q2 = rest.foldLeft(q1){(q, frag) => frag match {
-                                                case ((addr, len), idx) => setDescr (q, (q._3 + idx) % q._1.length, (addr, len, false, true))
+                                                case (Fragment(addr, len), idx) => setDescr (q, (q.end + idx) % q.buf.length, Descr(addr, len, false, true))
                                             }
                               }
     val res = advanceLast(q2, p.length)
@@ -109,18 +108,18 @@ import scala.math._
 
 def genBuf(sz : Int, use : Int, rand : Random) : DMACB = {
     var (q:Vector[Descr]) = Vector()
-    for (_ <- 0 to sz - 1) q = q :+ (rand.nextInt(), rand.nextInt(), rand.nextBoolean(), false)
+    for (_ <- 0 to sz - 1) q = q :+ Descr(rand.nextInt(), rand.nextInt(), rand.nextBoolean(), false)
 
     val start = rand.nextInt(sz)
     for (i <- 0 to use - 1) {
-        val frag = (rand.nextInt(), rand.nextInt(), if (i == use - 1) true else rand.nextBoolean(), true)
+        val frag = Descr(rand.nextInt(), rand.nextInt(), if (i == use - 1) true else rand.nextBoolean(), true)
         q = q.updated((start + i) % sz, frag)
     }
-    (q, start, (start + use) % sz)
+    DMACB(q, start, (start + use) % sz)
 }
 
 def genPkt(sz : Int, rand : Random) : Packet = {
-    List(1 to sz).map (_ => (rand.nextInt(), rand.nextInt()))
+    List(1 to sz).map (_ => Fragment(rand.nextInt(), rand.nextInt()))
 }
 
 def test (maxsz : Int, ntests : Int, rand : Random) = {
@@ -135,8 +134,8 @@ def test (maxsz : Int, ntests : Int, rand : Random) = {
             println("test" + (i+1) + " passed")
         } catch {
             case e: AssertionError => println ("Failed test:")
-                                      println (cb._1.mkString("\n"))
-                                      println ("start = " + cb._2 + ", end = " + cb._3)
+                                      println (cb.buf.mkString("\n"))
+                                      println ("start = " + cb.start + ", end = " + cb.end)
                                       println ("Packet: " ++ p)
                     throw e
         
