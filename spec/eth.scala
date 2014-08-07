@@ -79,6 +79,7 @@ def consistent (cb : DMACB) : Boolean = {
  */
 def concPush (q : DMACB, p : Packet) : DMACB = {
     require(!p.isEmpty, "empty packet");
+    require(p.length < q._1.length - ((q._3 - q._2) % q._1.length), "packet too long");
     require (consistent(q), "queue in inconsistent state")
     val ((addr, len), idx) :: rest = p.zipWithIndex.reverse
     val q1 = setDescr (q, (q._3 + idx) % q._1.length, (addr, len, true, true))
