@@ -1,0 +1,182 @@
+/* Transducer types */
+
+// DMA descriptor 
+typedef struct {
+    uint<32> addr;
+    uint<16> size;
+    bool     last;
+    bool     own;
+} descr_t;
+
+// concrete alphabet
+typedef enum {
+    DESCR,
+    END_OF_BUFFER    
+} conc_abc_t;
+
+// Packet fragment 
+typedef struct {
+    uint<32> addr;
+    uint<16> size;
+} frag_t;
+
+// abstract alphabet
+typedef enum {
+    FRAG,
+    END_OF_PACKET,
+    END_OF_QUEUE        
+} abs_abc_t;
+ 
+
+// Transducer type that accepts concrete alphabet
+template conc_xducer
+    // transition function
+    procedure void push(conc_abc_t sym, descr_t descr);
+endtemplate
+
+// Transducer type that accepts abstract alphabet
+template abs_xducer
+    procedure void push(abs_abc_t sym, frag_t frag);
+endtemplate
+
+// Abstract multiplexer type
+template abs_mux
+    procedure void push1(abs_abc_t sym, frag_t frag);
+    procedure void push2(abs_abc_t sym, frag_t frag);
+endtemplate
+
+template abs_sink1(abs_mux mux)
+    derive abs_xducer;
+    procedure void push(abs_abc_t sym, frag_t frag) {mux.push1(sym, frag);};
+endtemplate
+
+template abs_sink2(abs_mux mux)
+    derive abs_xducer;
+    procedure void push(abs_abc_t sym, frag_t frag) {mux.push2(sym, frag);};
+endtemplate
+
+/* Semantics transducer */
+template sem_xducer(abs_xducer next)
+
+    derive conc_xducer;
+
+    // transducer states
+    typedef enum {
+        COMPLETE_PACKET,
+        PARTIAL_PACKET,
+        FINAL
+    } state_t;
+
+    state_t state = COMPLETE_PACKET;
+
+    procedure void push (conc_abc_t sym, descr_t descr) {
+        if (state == FINAL) return;
+        case (sym) {
+            DESCR: if (descr.own) {
+                       next.push(FRAG, frag_t{descr.addr, descr.size});
+                       if (descr.last) {
+                           state = COMPLETE_PACKET;
+                           next.push(END_OF_PACKET, frag_t{32'h0, 16'h0});
+                       } else {
+                           state = PARTIAL_PACKET;
+                       };
+                   } else {
+                       assume (state == COMPLETE_PACKET);
+                       next.push (END_OF_QUEUE, frag_t{32'h0, 16'h0});
+                       state = FINAL;
+                   };
+            END_OF_BUFFER: assume(false);
+        };
+    };
+endtemplate
+
+/* Abstract append operation */
+template abs_append_xducer(abs_xducer next)
+    derive abs_xducer;
+
+    procedure void push(abs_abc_t sym, frag_t frag) {
+        if (sym != END_OF_QUEUE)
+            next.push (sym, frag);
+    };
+
+    procedure void push_arg(abs_abc_t sym, frag_t frag) {
+        case (sym) {
+            FRAG:          next.push(sym, frag);
+            END_OF_PACKET: {
+                    next.push(END_OF_PACKET, frag_t{32'h0, 16'h0});
+                    next.push(END_OF_QUEUE, frag_t{32'h0, 16'h0});
+                };
+            END_OF_QUEUE: assume(false);
+        };
+    };
+endtemplate
+
+/* Concrete append xducer template */
+template conc_append_xducer(sem_xducer next)
+    task uncontrollable void push(conc_abc_t sym, descr_t descr) {
+        ...;
+    };
+
+    task controllable void push_next(conc_abc_t sym, descr_t frag) {
+        next.push(sym, frag);
+    };
+endtemplate
+
+// Multiplexer that checks that its two inputs generate the same
+// data strings.  Buffers up to two values.
+template compare2_xducer
+    derive abs_mux;
+
+    uint<2> num_stored = 2'd0;
+    uint<1> stored_by  = 1'd0;
+    abs_abc_t stored_sym1;
+    frag_t    stored_frag1;
+    abs_abc_t stored_sym2;
+    frag_t    stored_frag2;
+   
+    procedure void push1(abs_abc_t sym, frag_t frag) {
+        check(sym,frag,1'd0);
+    };
+
+    procedure void push2(abs_abc_t sym, frag_t frag) {
+        check(sym,frag,1'd1);
+    };
+
+    procedure void check (abs_abc_t sym, frag_t frag, uint<1> pushed_by) {
+        case (num_stored) {
+            2'd0: {
+                   num_stored = 2'd1;
+                   stored_by  = pushed_by;
+                   stored_sym1 = sym;
+                   stored_frag1 = frag;
+               };
+            2'd1: if (stored_by == pushed_by) {
+                   num_stored = 2'd2;
+                   stored_sym2 = sym;
+                   stored_frag2 = frag;
+               } else {
+                   num_stored = 2'd0;
+                   assert (sym == stored_sym1);
+                   assert (frag == stored_frag1);
+               };
+            2'd2: { 
+                   assert (stored_by != pushed_by);
+                   assert (sym == stored_sym1);
+                   assert (frag == stored_frag1);
+                   stored_sym1 = stored_sym2;
+                   stored_frag1 = stored_frag2;
+               };
+        };
+    };
+
+endtemplate
+
+template main
+    instance sem_xducer sem1(aappend);
+    instance sem_xducer sem2(sink2);
+    instance abs_append_xducer aappend(sink1);
+    instance conc_append_xducer cappend(sem2);
+    instance compare2_xducer compare;
+    instance abs_sink1 sink1(compare);
+    instance abs_sink2 sink2(compare);
+endtemplate
