@@ -8,51 +8,50 @@ typedef struct {
     bool     own;
 } descr_t;
 
-// concrete alphabet
-typedef enum {
-    DESCR,
-    END_OF_BUFFER    
-} conc_abc_t;
-
 // Packet fragment 
 typedef struct {
     uint<32> addr;
     uint<16> size;
 } frag_t;
 
-// abstract alphabet
-typedef enum {
-    FRAG,
-    END_OF_PACKET,
-    END_OF_QUEUE        
-} abs_abc_t;
- 
-
 // Transducer type that accepts concrete alphabet
 template conc_xducer
     // transition function
-    procedure void push(conc_abc_t sym, descr_t descr);
+    procedure void push_descr(descr_t descr);
+    procedure void push_eob();
 endtemplate
 
 // Transducer type that accepts abstract alphabet
 template abs_xducer
-    procedure void push(abs_abc_t sym, frag_t frag);
+    procedure void push_frag(frag_t frag);
+    procedure void push_eop();
+    procedure void push_eoq();
 endtemplate
 
 // Abstract multiplexer type
 template abs_mux
-    procedure void push1(abs_abc_t sym, frag_t frag);
-    procedure void push2(abs_abc_t sym, frag_t frag);
+    procedure void push1_frag(frag_t frag);
+    procedure void push1_eop();
+    procedure void push1_eoq();
+
+    procedure void push2_frag(frag_t frag);
+    procedure void push2_eop();
+    procedure void push2_eoq();
 endtemplate
 
 template abs_sink1(abs_mux mux)
     derive abs_xducer;
-    procedure void push(abs_abc_t sym, frag_t frag) {mux.push1(sym, frag);};
+    procedure void push_frag(frag_t frag) {mux.push1_frag(frag);};
+    procedure void push_eop() {mux.push1_eop();};
+    procedure void push_eoq() {mux.push1_eoq();};
 endtemplate
 
 template abs_sink2(abs_mux mux)
     derive abs_xducer;
-    procedure void push(abs_abc_t sym, frag_t frag) {mux.push2(sym, frag);};
+
+    procedure void push_frag(frag_t frag) {mux.push2_frag(frag);};
+    procedure void push_eop() {mux.push2_eop();};
+    procedure void push_eoq() {mux.push2_eoq();};
 endtemplate
 
 /* Semantics transducer */
@@ -67,26 +66,27 @@ template sem_xducer(abs_xducer next)
         FINAL
     } state_t;
 
-    state_t state = COMPLETE_PACKET;
+    export state_t state = COMPLETE_PACKET;
 
-    procedure void push (conc_abc_t sym, descr_t descr) {
+    procedure void push_descr (descr_t descr) {
         if (state == FINAL) return;
-        case (sym) {
-            DESCR: if (descr.own) {
-                       next.push(FRAG, frag_t{descr.addr, descr.size});
-                       if (descr.last) {
-                           state = COMPLETE_PACKET;
-                           next.push(END_OF_PACKET, frag_t{32'h0, 16'h0});
-                       } else {
-                           state = PARTIAL_PACKET;
-                       };
-                   } else {
-                       assume (state == COMPLETE_PACKET);
-                       next.push (END_OF_QUEUE, frag_t{32'h0, 16'h0});
-                       state = FINAL;
-                   };
-            END_OF_BUFFER: assume(false);
+        if (descr.own) {
+            next.push_frag(frag_t{descr.addr, descr.size});
+            if (descr.last) {
+                state = COMPLETE_PACKET;
+                next.push_eop();
+            } else {
+                state = PARTIAL_PACKET;
+            };
+        } else {
+            assume (state == COMPLETE_PACKET);
+            next.push_eoq ();
+            state = FINAL;
         };
+    };
+
+    procedure void push_eob () {
+        assume (state == FINAL);
     };
 endtemplate
 
@@ -94,31 +94,46 @@ endtemplate
 template abs_append_xducer(abs_xducer next)
     derive abs_xducer;
 
-    procedure void push(abs_abc_t sym, frag_t frag) {
-        if (sym != END_OF_QUEUE)
-            next.push (sym, frag);
+    procedure void push_frag(frag_t frag) {
+        next.push_frag (frag);
+    };
+    procedure void push_eop() {
+        next.push_eop();
+    };
+    procedure void push_eoq() {};
+
+    procedure void push_arg_frag(frag_t frag) {
+        next.push_frag(frag);
     };
 
-    procedure void push_arg(abs_abc_t sym, frag_t frag) {
-        case (sym) {
-            FRAG:          next.push(sym, frag);
-            END_OF_PACKET: {
-                    next.push(END_OF_PACKET, frag_t{32'h0, 16'h0});
-                    next.push(END_OF_QUEUE, frag_t{32'h0, 16'h0});
-                };
-            END_OF_QUEUE: assume(false);
-        };
+    procedure void push_arg_eop() {
+        next.push_eop();
+        next.push_eoq();
     };
 endtemplate
 
 /* Concrete append xducer template */
-template conc_append_xducer(sem_xducer next)
-    task uncontrollable void push(conc_abc_t sym, descr_t descr) {
+template conc_append_xducer(sem_xducer next, sem_xducer par)
+    frag_t prev;
+    bool   prev_set = false;
+
+    task uncontrollable void push_descr(descr_t descr) {
         ...;
     };
 
-    task controllable void push_next(conc_abc_t sym, descr_t frag) {
-        next.push(sym, frag);
+    task uncontrollable void push_eob() {...;};
+ 
+    task uncontrollable void push_arg_frag(frag_t frag) {
+        ...;
+        prev = frag;
+        prev_set = true;
+    };
+    task uncontrollable void push_arg_eop() {
+        ...;
+    };
+
+    task controllable void push_descr_next(descr_t descr) {
+        next.push_descr(descr);
     };
 endtemplate
 
@@ -126,23 +141,45 @@ endtemplate
 // data strings.  Buffers up to two values.
 template compare2_xducer
     derive abs_mux;
+    
+    typedef enum{FRAG, EOP, EOQ} sym_t;
 
-    uint<2> num_stored = 2'd0;
+    export bool error = false;
+    export uint<2> num_stored = 2'd0;
     uint<1> stored_by  = 1'd0;
-    abs_abc_t stored_sym1;
-    frag_t    stored_frag1;
-    abs_abc_t stored_sym2;
-    frag_t    stored_frag2;
-   
-    procedure void push1(abs_abc_t sym, frag_t frag) {
-        check(sym,frag,1'd0);
+    sym_t  stored_sym1;
+    frag_t stored_frag1;
+    sym_t  stored_sym2;
+    frag_t stored_frag2;
+    sym_t  stored_sym3;
+    frag_t stored_frag3;
+  
+    procedure void push1_frag(frag_t frag) {
+        check(FRAG,frag,1'd0);
     };
 
-    procedure void push2(abs_abc_t sym, frag_t frag) {
-        check(sym,frag,1'd1);
+    procedure void push1_eop() {
+        check(EOP,frag_t{32'd0, 16'd0},1'd0);
     };
 
-    procedure void check (abs_abc_t sym, frag_t frag, uint<1> pushed_by) {
+    procedure void push1_eoq() {
+        check(EOQ,frag_t{32'd0, 16'd0},1'd0);
+    };
+
+    procedure void push2_frag(frag_t frag) {
+        check(FRAG,frag,1'd1);
+    };
+
+    procedure void push2_eop() {
+        check(EOP,frag_t{32'd0, 16'd0},1'd1);
+    };
+
+    procedure void push2_eoq() {
+        check(EOQ,frag_t{32'd0, 16'd0},1'd1);
+    };
+
+
+    procedure void check (sym_t sym, frag_t frag, uint<1> pushed_by) {
         case (num_stored) {
             2'd0: {
                    num_stored = 2'd1;
@@ -156,27 +193,69 @@ template compare2_xducer
                    stored_frag2 = frag;
                } else {
                    num_stored = 2'd0;
-                   assert (sym == stored_sym1);
-                   assert (frag == stored_frag1);
+                   if ((sym != stored_sym1) || (frag != stored_frag1)) error = true;
                };
-            2'd2: { 
-                   assert (stored_by != pushed_by);
-                   assert (sym == stored_sym1);
-                   assert (frag == stored_frag1);
+            2'd2: if (stored_by == pushed_by) {
+                   num_stored = 2'd3;
+                   stored_sym3 = sym;
+                   stored_frag3 = frag;
+               } else {
+                   num_stored = 2'd1;
+                   if ((sym != stored_sym1) || (frag != stored_frag1)) error = true;
                    stored_sym1 = stored_sym2;
                    stored_frag1 = stored_frag2;
                };
+            2'd3: {
+                   if ((stored_by == pushed_by) || (sym != stored_sym1) || (frag != stored_frag1)) error = true;
+                   num_stored = 2'd2;
+                   stored_sym1  = stored_sym2;
+                   stored_frag1 = stored_frag2;
+                   stored_sym2  = stored_sym3;
+                   stored_frag2 = stored_frag3;
+               };
         };
     };
-
 endtemplate
 
 template main
-    instance sem_xducer sem1(aappend);
-    instance sem_xducer sem2(sink2);
-    instance abs_append_xducer aappend(sink1);
-    instance conc_append_xducer cappend(sem2);
-    instance compare2_xducer compare;
-    instance abs_sink1 sink1(compare);
-    instance abs_sink2 sink2(compare);
+    instance sem_xducer         sem1(aappend);
+    instance sem_xducer         sem2(sink2);
+    instance abs_append_xducer  aappend(sink1);
+    instance conc_append_xducer cappend(sem2, sem1);
+    instance compare2_xducer    compare;
+    instance abs_sink1          sink1(compare);
+    instance abs_sink2          sink2(compare);
+
+    process pgenerator {
+        descr_t    descr;
+        frag_t     frag;
+        bool       done1;
+        bool       done2;
+
+        do {
+            descr = *;
+            sem1.push_descr(descr);
+            pause;
+            cappend.push_descr(descr);
+            done1 = *;
+            pause;
+        } while (!done1);
+        sem1.push_eob();
+        pause;
+        cappend.push_eob();
+        pause;
+        do {
+            frag = *;
+            aappend.push_arg_frag(frag);
+            cappend.push_arg_frag(frag);
+            done2 = *;
+            pause;
+        } while (!done2);
+        aappend.push_arg_eop();
+        pause;
+        cappend.push_arg_eop();
+        pause;
+
+        assert((compare.num_stored == 2'd0) && (compare.error == false));
+    };
 endtemplate
