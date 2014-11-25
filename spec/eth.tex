@@ -123,7 +123,31 @@ example.  Table~\ref{t:alphabet} defines their alphabets.
 \end{figure}
 
 \begin{table}
+    \small
     \begin{tabular}{|l|p{0.7\linewidth}|}
+        \hline
+        symbol & description \\
+        \hline\hline
+        \multicolumn{2}{|c|}{Abstract queue alphabet}\\
+        \hline
+        \texttt{PKT}     & marks the start of a packet\\
+        \texttt{DATA(b)} & a byte of data\\
+        \texttt{EOD}     & follows the last byte of a packet\\
+        \hline
+        \multicolumn{2}{|c|}{New packet alphabet}\\
+        \hline
+        \texttt{NEWPKT(n)}     & marks the start of a packet; \texttt{n} is the number of fragments in the packet\\
+        \texttt{FRAG(addr,sz)} & marks the start of a fragment; \texttt{addr} and \texttt{sz} contain the address and size of packet data\\
+        \texttt{DATA(b)}       & a byte of data\\
+        \texttt{EOD}           & follows the last byte of a fragment\\
+        \hline
+        \multicolumn{2}{|c|}{Circular buffer alphabet}\\
+        \hline
+        \texttt{DESCR(addr,sz,last,own)} & marks the start of a DMA descriptor; \texttt{last} is set to true iff this is the last descriptor in a packet; \texttt{own} is either \texttt{DEV} or \texttt{OS}\\
+        \texttt{DATA(b)}       & a byte of data\\
+        \texttt{EOD}           & follows the last byte of a descriptor \\
+        \texttt{END}           & end marker; follows the last descriptor owned by the device \\
+        \hline
     \end{tabular}
     \label{t:alphabet}
 \end{table}
@@ -293,6 +317,35 @@ the \texttt{EOI} symbol from the second input word.  In state 8,
 it iterates through the rest of the first input word, which 
 corresponds to the remaining unmodified entries of the circular 
 buffers and copies them to the output.  
+
+\section{The verification problem}
+
+Given the safety automata and transducers described above, the 
+verification problem falls into three parts:
+
+\begin{enumerate}
+    \item For each transducer $T$ with $k$ inputs with 
+        corresponding input safety automata $A_i$, $i\in [1,k]$, 
+        verify that $T$ accepts any combination of strings 
+        $s_1,\ldots,s_k$ as long as each $s_i$ belongs to the 
+        language of $A_i$.
+
+    \item For each transducer $T$ with input safety automata 
+        $A_i$, $i\in [1,k]$ and output safety automaton $B$, 
+        verify that for any $A_i$-compliant inputs $s_i$, 
+        $i\in[1,k]$, the transducer outputs a $B$-compliant 
+        output.
+
+    \item Given two transducers $T_1$ and $T_2$ over $k$ common 
+        inputs with input safety automata $A_i$, $i \in [1,k]$, 
+        verify that $T_1$ and $T_2$ produce identical outputs for 
+        any $A_i$-compliant inputs.
+\end{enumerate}
+
+Properties~1 and~2 can be verified compositionally, i.e., they 
+hold for compositions of transducers as long as they hold for each 
+component.  Property~3, on the other hand, must be checked over 
+compositions of transducers, shown in Figure~\ref{f:arch}.
 
 \section{Next modelling steps}
 
