@@ -128,11 +128,15 @@ example.  Table~\ref{t:alphabet} defines their alphabets.
         \hline
         symbol & description \\
         \hline\hline
+        \texttt{EOI(status)}   & the mandatory last symbol of any word in any language; the
+                                 \texttt{status} argument must be 
+                                 \texttt{OK} or \texttt{ERR} \\
+        \hline
         \multicolumn{2}{|c|}{Abstract queue alphabet}\\
         \hline
-        \texttt{PKT}     & marks the start of a packet\\
-        \texttt{DATA(b)} & a byte of data\\
-        \texttt{EOD}     & follows the last byte of a packet\\
+        \texttt{PKT}           & marks the start of a packet\\
+        \texttt{DATA(b)}       & a byte of data\\
+        \texttt{EOD}           & follows the last byte of a packet\\
         \hline
         \multicolumn{2}{|c|}{New packet alphabet}\\
         \hline
@@ -176,7 +180,7 @@ symbol appears last in the word.
 \subsection{The new packet safety automaton}
 
 The safety automaton for the new packet type 
-(Figure~\ref{pkt_safety}) uses two registers: \texttt{nfrags}, 
+(Figure~\ref{f:pkt_safety}) uses two registers: \texttt{nfrags}, 
 which stores the number of fragments in the packet, and 
 \texttt{cnt}, which counts the number of fragments parsed by the 
 automaton.  The automaton accepts words that start with a 
@@ -196,7 +200,7 @@ fragments specified in the header.
 automaton}\label{s:conc_safety}
 
 The safety automaton for the circular buffer type 
-(Figure~\ref{conc_safety}) uses the \texttt{is\_last} boolean 
+(Figure~\ref{f:conc_safety}) uses the \texttt{is\_last} boolean 
 variable to keep track of whether the automaton is parsing the 
 last descriptor of a packet (note that, although \texttt{is\_last} 
 is modeled as a register, it could also be simply integrated into 
@@ -204,7 +208,9 @@ the state space of the automaton).  The automaton requires that
 the \texttt{END} symbol appears after the last fragment of a 
 packet (transition 1-3), that it is followed by at least one 
 fragment owned by the OS (3-4) and that all subsequent fragments 
-are owned by the OS (4-4).  
+are owned by the OS (4-4).  Finally, the \texttt{ndescr} counter 
+and the guard of transition (1-2) bound the number of packets in 
+the buffer to \texttt{MAX\_DESCR}.
 
 \begin{figure}[t]
     \center
@@ -284,11 +290,13 @@ input read by the transition.
 
 
 The transducer first copies the entire first word (sans the EOI 
-symbol) to the output (states 1 and 2) and then copies the content 
-of all fragments of the new packet to the output (states 3-4), 
-prefixing them by the \texttt{PKT} symbol.  Upon reaching the end 
-of the second input, it output \texttt{EOD} and \texttt{EOI} 
-symbols (transition 3-5).
+symbol) to the output (states 1 and 2).  Next, it make a 
+non-deterministic choice between continuing to append the new 
+packet to the buffer(2-3) or failing (2-5).  In the former case, 
+it copies the content of all fragments of the new packet to the 
+output (states 3-4), prefixing them with the \texttt{PKT} symbol.  
+Upon reaching the end of the second input, it output \texttt{EOD} 
+and \texttt{EOI(OK)} symbols (transition 3-5).
 
 \subsection{The concrete append transducer}
 
@@ -306,17 +314,18 @@ buffer safety automaton (Section~\ref{s:conc_safety}).
 \end{figure}
 
 The transducer first copies all circular buffer entries up to the 
-\texttt{END} marker to the output (states 1 and 2).  States 3 and 
-4 of the automaton copy a fragment of the new packet to the next 
-circular buffer descriptor.  This corresponds to overwriting an 
-existing descriptor; hence the automaton must remove this 
-descriptor and all its content from the first input word.  This is 
-accomplished in states 5 and 6.  After iterating through all 
-fragments of the new packet (transition 6-7), the transducer reads 
-the \texttt{EOI} symbol from the second input word.  In state 8, 
-it iterates through the rest of the first input word, which 
-corresponds to the remaining unmodified entries of the circular 
-buffers and copies them to the output.  
+\texttt{END} marker to the output (states 1 and 2).  It then 
+checks whether there is sufficient space in the buffer for the new 
+packet (2-3 and 2-10).  States 3 and 4 of the automaton copy a 
+fragment of the new packet to the next circular buffer descriptor.  
+This corresponds to overwriting an existing descriptor; hence the 
+automaton must remove this descriptor and all its content from the 
+first input word.  This is accomplished in states 5 and 6.  After 
+iterating through all fragments of the new packet (transition 
+6-7), the transducer reads the \texttt{EOI} symbol from the second 
+input word.  In state 8, it iterates through the rest of the first 
+input word, which corresponds to the remaining unmodified entries 
+of the circular buffers and copies them to the output.  
 
 \section{The verification problem}
 
@@ -336,10 +345,14 @@ verification problem falls into three parts:
         $i\in[1,k]$, the transducer outputs a $B$-compliant 
         output.
 
-    \item Given two transducers $T_1$ and $T_2$ over $k$ common 
+    \item Given a, possibly non-deterministic, 
+        \emph{specification} transducer $T_1$ and a deterministic 
+        \emph{implementation transducer} $T_2$ over $k$ common 
         inputs with input safety automata $A_i$, $i \in [1,k]$, 
-        verify that $T_1$ and $T_2$ produce identical outputs for 
-        any $A_i$-compliant inputs.
+        verify that for any combination $a_1,\ldots,a_k$ of 
+        $A_i$-compliant inputs, $T_2(a_1,\ldots, a_k)\in 
+        T_1(a_1,\ldots,a_k)$, i.e., the output of $T_2$ is a 
+        possible output of $T_1$.
 \end{enumerate}
 
 Properties~1 and~2 can be verified compositionally, i.e., they 
@@ -353,7 +366,8 @@ This simple case study is missing a number of features needed to
 model real-world DMA operation.  In particular, we need to:
 
 \begin{itemize}
-    \item model the fact that the circular buffer is bounded
+    \item model the fact that the circular buffer is bounded 
+        \textbf(done)
     \item model the second ``shadow'' circular buffer that stores 
         virtual addresses of DMA buffers
     \item model packet fragmentation/defragmentation operations
