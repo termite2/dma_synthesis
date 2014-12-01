@@ -30,6 +30,7 @@ FigFiles = imgs/conc_append.pdf \
 	   imgs/conc_safety.pdf \
 	   imgs/arch.pdf \
 	   imgs/types.pdf \
+	   imgs/counters.pdf\
 	   imgs/abstractor.pdf
 
 # Any other stuff that may be needed
