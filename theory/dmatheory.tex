@@ -1,0 +1,67 @@
+\documentclass{article}
+
+\usepackage{amsfonts,stmaryrd}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{color}
+\usepackage{mathrsfs}
+
+\usepackage{xspace}
+
+\input{macros}
+\newcommand{\loris}{\textcolor[rgb]{0.00,0.00,1.00}}
+
+\begin{document}
+
+\title{Symbolic counter machine}
+
+\author{}
+\maketitle
+
+\section{Definition}
+
+\begin{definition}
+A (nondeterministic) symbolic counter machine is a tuple $A=(Q,q_0,F,C,S,\delta)$, 
+where
+\begin{itemize}
+\item $Q$ is a finite set of states,
+\item $q_0\in Q$ is an initial state,
+\item $F\subseteq Q$ is a set of accepting states,
+\item $C$ is a finite set of counters,
+\item $S$ is a finite set of symbolic values,
+\item $\delta$ is a transition relation containing tuples of the form
+\begin{description}
+\item[Test and set:] $(q,\varphi,\update,q')$ such that:
+\begin{itemize}
+\item $q,q'\in Q$ are the source and target states respectively;
+\item $\verphi\subseteq C$ is the activation guard; and
+\item $\update: C \mapsto S$ is an counter update that maps a subset of the counters $C$ so values in $S$.
+\end{itemize}
+
+\item[Decrement:] $(q,c,q')$ such that $q,q'\in Q$ are the source and target states respectively, and $c\in C$ is a counter being decremented;
+    
+\end{description}
+\end{itemize}
+\end{definition}
+
+
+Intuitively the machine $A$ starts in state $q_0$ with all the counters set to $0$. 
+Each test and set transition $(q,\varphi,\update,q')$ checks whether the set of counters
+$\varphi$ has value $0$ and, if this is the case, it updates the values each
+counter $c$ for which $\update$ is defined to $\update(c)$.
+Each decrement transition $(q,c,q')$ subtracts $1$ from the value of the counter $c$.
+A run reaching the final state is a successful run.
+
+\loris{TODO: define semantics formally}
+
+\section{Reachability algorithm}
+
+Depending on the values assigned to the symbolic values in $S$, final states can be reachable or not.
+
+The reachability problem is to find whether there exist values of $S$ for which $A$ can reach the final states.
+
+\section{Complement}
+
+
+\end{document}
+
