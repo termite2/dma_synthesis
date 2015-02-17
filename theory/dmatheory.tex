@@ -1,6 +1,6 @@
-\documentclass{article}
+\documentclass[letterpaper,11pt]{article}
 
-\usepackage{amsfonts,stmaryrd}
+%\usepackage{amsfonts}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{color}
@@ -13,9 +13,9 @@
 
 \begin{document}
 
-\title{Symbolic counter machine}
+\title{Symbolic counter machines}
 
-\author{}
+\author{...}
 \maketitle
 
 \section{Definition}
@@ -34,7 +34,7 @@ where
 \item[Test and set:] $(q,\varphi,\update,q')$ such that:
 \begin{itemize}
 \item $q,q'\in Q$ are the source and target states respectively;
-\item $\verphi\subseteq C$ is the activation guard; and
+\item $\varphi\subseteq C$ is the activation guard; and
 \item $\update: C \mapsto S$ is an counter update that maps a subset of the counters $C$ so values in $S$.
 \end{itemize}
 
@@ -62,6 +62,10 @@ The reachability problem is to find whether there exist values of $S$ for which 
 
 \section{Complement}
 
+\cite{jurg14}
+
+\bibliographystyle{alpha}
+\bibliography{dmatheory}
 
 \end{document}
 
