@@ -5,6 +5,7 @@
 \usepackage{amssymb}
 \usepackage{color}
 \usepackage{mathrsfs}
+\usepackage{amsfonts}
 
 \usepackage{xspace}
 
@@ -21,7 +22,7 @@
 \section{Definition}
 
 \begin{definition}
-A (nondeterministic) symbolic counter machine is a tuple $A=(Q,q_0,F,C,S,\delta)$, 
+A (nondeterministic) symbolic counter machine is a tuple $A=(Q,q_0,F,C,S,\delta)$,
 where
 \begin{itemize}
 \item $Q$ is a finite set of states,
@@ -31,21 +32,21 @@ where
 \item $S$ is a finite set of symbolic values,
 \item $\delta$ is a transition relation containing tuples of the form
 \begin{description}
-\item[Test and set:] $(q,\varphi,\update,q')$ such that:
+\item[Test and set:] $(q,C_t,\varphi,q')$ such that:
 \begin{itemize}
 \item $q,q'\in Q$ are the source and target states respectively;
-\item $\varphi\subseteq C$ is the activation guard; and
-\item $\update: C \mapsto S$ is an counter update that maps a subset of the counters $C$ so values in $S$.
+\item $C_t\subseteq C$ is the set of counters that is tested to be equal to 0; and
+\item $\varphi\subseteq lin(C_t)$ is a counter update that maps a subset of the counters $C_t$ to values in $S$.
 \end{itemize}
 
 \item[Decrement:] $(q,c,q')$ such that $q,q'\in Q$ are the source and target states respectively, and $c\in C$ is a counter being decremented;
-    
+
 \end{description}
 \end{itemize}
 \end{definition}
 
 
-Intuitively the machine $A$ starts in state $q_0$ with all the counters set to $0$. 
+Intuitively the machine $A$ starts in state $q_0$ with all the counters set to $0$.
 Each test and set transition $(q,\varphi,\update,q')$ checks whether the set of counters
 $\varphi$ has value $0$ and, if this is the case, it updates the values each
 counter $c$ for which $\update$ is defined to $\update(c)$.
