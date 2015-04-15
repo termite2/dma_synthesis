@@ -1,14 +1,5 @@
 \documentclass[letterpaper,11pt]{article}
 
-%\usepackage{amsfonts}
-\usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage{color}
-\usepackage{mathrsfs}
-\usepackage{amsfonts}
-
-\usepackage{xspace}
-
 \input{macros}
 \newcommand{\loris}{\textcolor[rgb]{0.00,0.00,1.00}}
 
@@ -22,21 +13,21 @@
 \section{Definition}
 
 \begin{definition}
-A (nondeterministic) symbolic counter machine is a tuple $A=(Q,q_0,F,C,S,\delta)$,
+A (nondeterministic) symbolic counter machine is a tuple $A=(Q,q_0,F,C,\delta)$,
 where
 \begin{itemize}
 \item $Q$ is a finite set of states,
 \item $q_0\in Q$ is an initial state,
 \item $F\subseteq Q$ is a set of accepting states,
 \item $C$ is a finite set of counters,
-\item $S$ is a finite set of symbolic values,
 \item $\delta$ is a transition relation containing tuples of the form
 \begin{description}
-\item[Test and set:] $(q,C_t,\varphi,q')$ such that:
+\item[Test and set:] $(q,C_t,\varphi,\rho,q')$ such that:
 \begin{itemize}
 \item $q,q'\in Q$ are the source and target states respectively;
-\item $C_t\subseteq C$ is the set of counters that is tested to be equal to 0; and
-\item $\varphi\subseteq lin(C_t)$ is a counter update that maps a subset of the counters $C_t$ to values in $S$.
+\item $C_t\subseteq$ is the subset of counters being tested;
+\item $\varphi \subseteq lin(C_t)$ is a linear guard over the counters $C_t$; and
+\item $\rho\subseteq lin(C_t)$ is a linear counter update that nondeterministically maps the counters $C_t$ to a value satisfying $\rho$.
 \end{itemize}
 
 \item[Decrement:] $(q,c,q')$ such that $q,q'\in Q$ are the source and target states respectively, and $c\in C$ is a counter being decremented;
@@ -47,20 +38,50 @@ where
 
 
 Intuitively the machine $A$ starts in state $q_0$ with all the counters set to $0$.
-Each test and set transition $(q,\varphi,\update,q')$ checks whether the set of counters
-$\varphi$ has value $0$ and, if this is the case, it updates the values each
-counter $c$ for which $\update$ is defined to $\update(c)$.
+Each test and set transition $(q,C_t,\varphi,\rho,q')$ checks whether the set of counters $C_t$ have
+values satisfying
+$\varphi$ and, if this is the case, it updates the values of the 
+counters in $C_t$ to a value satisfying $\rho$.
 Each decrement transition $(q,c,q')$ subtracts $1$ from the value of the counter $c$.
 A run reaching the final state is a successful run.
 
 \loris{TODO: define semantics formally}
 
 \section{Reachability algorithm}
+The reachability problem is to find whether, given two states $q_1$ and $q_2$ in $Q$ there exists a path from $q_1$ to $q_2$.
+We solve this problem via a Kleene-style reachability algorithm.
 
-Depending on the values assigned to the symbolic values in $S$, final states can be reachable or not.
-
-The reachability problem is to find whether there exist values of $S$ for which $A$ can reach the final states.
-
+Let $S(q_1,q_2,R,V)$ be the set of counter values we can obtain when starting in state $q_1$ (with counter values 0) and reaching state $q_2$ such that:
+\begin{itemize}
+\item a path can use ONLY the test-and-set transitions in $R$ but all decrement transitions;
+\item each counter $c\in V$ must be reset at least once (in some sense $V\subseteq V(R)$), and no other counter can be reset.
+\end{itemize}
+We can define this quantity as follows.
+\[
+\begin{array}{rcl}
+S(q_1,q_2,R, \emptyset) & = &P\text{ the semilinear set induced by all}\\
+&& \text{decrement transitions from }q_1\text{ to  }q_2\\
+S(q_1,q_2,R,V) & = &\emptyset\text{ if } \neg V\subseteq V(R)\\
+&&\\
+S(q_1,q_2,R,V) & = & \bigcup\limits_{r=(q_3,V_r, \varphi, \rho, q_4)\in R} S(q_1,q_2, R\setminus\{r\},V)\\
+&&\\
+& \cup & \bigcup\limits_{V_1\cup V_2 \cup V_r=V} S(q_1,q_3, R\setminus \{r\}, V_1) \proj \overline{V_2\cup V_r}\\
+&         &  \quad\quad\quad \quad\quad\quad + S(q_4,q_2,R\setminus\{r\}, V_2)\\
+&&\\
+ & \cup  & \bigcup\limits_{V_1\cup V_2\cup V_3 \cup V_r=V} S(q_1,q_3, R\setminus\{r\},V_1)\proj \overline{V_2\cup V_3\cup V_r}+\\
+&         &  \quad\quad\quad\quad\quad\quad\quad\quad\quad\quad\quad\quad + \gamma(R\setminus \{r\},r,V_2)\proj \overline{V_3\cup V_r} \\
+&         &  \quad\quad\quad\quad\quad\quad\quad\quad\quad\quad\quad\quad\quad\quad  + S(q_4,q_2, R\setminus \{r\},V_3)\\
+\end{array}
+\]
+The interesting case is the third rule. 
+For each $r\in R$ we take into account three possibilities:
+\begin{itemize}
+\item the paths that do not use $r$ but still reset all the variables in $V$;
+\item the paths that use $r$ exactly once. In this case we iterate over all possible sets $V_1$ and $V_2$ for which the union is $V$ and assume that
+		all the  that th
+\item the paths that use $r$ multiple times. This is the most interesting case in which we need to use the star operation. This is done via the function $\gamma$
+		that takes the star of all the possible combinations of $R$.
+\end{itemize}
 \section{Complement}
 
 \cite{jurg14}
