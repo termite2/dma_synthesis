@@ -1,0 +1,66 @@
+typedef enum {
+    a,
+    b,
+    start,
+    EOI
+} input_sym_t;
+
+typedef enum {
+    c,
+    EOO
+} out_t;
+
+typedef struct {
+   input_sym_t sym;
+   uint<32>    len;
+} in_t;
+
+const uint<32> MAX = 32'd256;
+
+transducer out_t seq T(in_t seq in)
+{
+    uint<32> x1 = MAX;
+    uint<32> x2;
+ 
+    ++in;
+    while ([in].sym == a) {
+        assert (x1 != 32'd0);
+        x1 = x1-32'd1;
+        [T] = c;
+        ++T;
+        ++in;
+    };
+    assume([in].len <= x1);
+    x2 = [in].len;
+
+    while(x2 != 32'd0) {
+        ++in;
+        assert([in].sym == b);
+        [T] = c;
+        ++T;
+        x2 = x2-32'd1;
+    };
+    ++in;
+    assume([in].sym == EOI);
+    [T] = EOO;
+    ++T;
+    while(true) {++in;};
+};
+
+transducer bool seq A(out_t seq in)
+{
+    uint<32> x = MAX;
+
+    ++in;
+    while ([in] == c) {
+        assert(x != 32'd0);
+        x = x - 32'd1;
+        ++in;
+    };    
+};
+
+transducer bool seq main(in_t seq in)
+{
+    instance T trans(in);
+    instance A safe(trans);       
+};
