@@ -32,12 +32,13 @@ The software (driver) part of the system is modeled by three transducers:
 ----------->| producer      |------------
             |               |           |             -------------------               -------------------
             -----------------           |             |                 | completion    | Completion queue| socket
-                                        --------------| Device rx engine|---------------| handler         |-------->
-            -----------------           |             |                 | descriptors   |                 | buffers
-  buffer    | jumbo rx descr|           |             -------------------               -------------------
------------>| producer      |-----------                       ^
-            |               | ext rx descriptors               |Ethernet
-            -----------------                                  |frames
+                                        --------------| Device rx engine|---------------| handler         |---------
+            -----------------           |             |                 | descriptors   |                 | buffers|
+  buffer    | jumbo rx descr|           |             -------------------               -------------------        |    ------------------
+----------->| producer      |-----------                       ^                                                   ---->|                |
+            |               | ext rx descriptors               |------------------------------------------------------->|     Safety     |
+            -----------------                                  |Ethernet                                                |                |
+                                                               |frames                                                  ------------------
 
 The two descriptor producers take a stream of memory buffers as inputs and produce rx descriptors as 
 outputs.  The device rx engine transducer only accepts std or jumbo descriptor when it has a packet
