@@ -25,9 +25,6 @@ public class CT{
 	protected Map<Integer, Collection<CTMove>> transitionsFrom;
 	protected Map<Integer, Collection<CTMove>> transitionsTo;
 
-//	protected Map<Integer, Collection<SSTEpsilon<P, F, S>>> epsTransitionsFrom;
-//	protected Map<Integer, Collection<SSTEpsilon<P, F, S>>> epsTransitionsTo;
-
 	public Integer stateCount() {
 		return states.size();
 	}
@@ -50,7 +47,7 @@ public class CT{
 	public static CT MkCT(
 			Collection<CTMove> transitions, 
 			Integer initialState,
-			Collection<Integer> finalStates,
+			Collection<Integer> finalStates,	
 			int numberOfCounters) {
 
 		CT aut = new CT();
@@ -67,6 +64,45 @@ public class CT{
 			aut.addTransition(t);
 
 		return aut;
+	}
+	
+	public boolean[][] getReachabilityRelation(){
+		//TODO make sure states are indexed in correct way
+		int n = maxStateId+1;
+		//Can go from i to j in k steps
+		boolean[][][] rr = new boolean[n][n][n+1]; 
+		//Initialize to identity
+		for(Integer fr: states)
+			for(Integer to: states)
+				for(int i = 0;i<n+1;i++)
+					rr[fr][to][i]=(fr==to);
+		
+		for(int i = 1;i<n+1;i++){
+			for(Integer fr: states){
+				for(Integer to: states){
+					if(rr[fr][to][i-1]){
+						for(CTMove moveFromTo: transitionsFrom.get(to)){
+							rr[fr][moveFromTo.to][i]=true;
+						}
+					}else{
+						rr[fr][to][i]=true;
+					}					
+				}					
+			}
+		}
+		
+		boolean[][] rrFinal = new boolean[n][n]; 
+		//Initialize to identity
+		for(Integer fr: states)
+			for(Integer to: states)
+				rrFinal[fr][to]=rr[fr][to][n];
+		return rrFinal;
+	}
+	
+	public boolean[][] getDecrementReachabilityRelation(){
+		//TODO need to figure this one out
+		
+		return null;
 	}
 	
 	/**
