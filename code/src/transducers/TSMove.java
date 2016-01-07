@@ -2,14 +2,15 @@ package transducers;
 
 public class TSMove extends CTMove{
 
-	int from, to;		
-	SemiLinearSet s;	
-		
-	public TSMove(int from, int to, SemiLinearSet s) {
+	TestVar tv;
+	SetVar sv;
+
+	public TSMove(int from, int to, TestVar tv, SetVar sv) {
 		super(from,to);
-		this.s = s;
+		this.tv = tv;
+		this.sv = sv;
 	}
-	
+
 
 	@Override
 	public Object clone(){
