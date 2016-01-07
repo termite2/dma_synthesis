@@ -22,21 +22,24 @@ public class CT{
 	protected int numberOfCounters;
 	
 	// Moves are inputs or epsilon
-	protected Map<Integer, Collection<CTMove>> transitionsFrom;
-	protected Map<Integer, Collection<CTMove>> transitionsTo;
+	protected Map<Integer, Collection<SLMove>> slTransitionsFrom;
+	protected Map<Integer, Collection<SLMove>> slTransitionsTo;
+	
+	// Moves are inputs or epsilon
+		protected Map<Integer, Collection<TSMove>> tsTransitionsFrom;
+		protected Map<Integer, Collection<TSMove>> tsTransitionsTo;
 
 	public Integer stateCount() {
 		return states.size();
 	}
 
-	public Integer transitionCount() {
-		return getTransitions().size();
-	}
 
 	protected CT() {
 		states = new HashSet<Integer>();
-		transitionsFrom = new HashMap<Integer, Collection<CTMove>>();
-		transitionsTo = new HashMap<Integer, Collection<CTMove>>();
+		slTransitionsFrom = new HashMap<Integer, Collection<SLMove>>();
+		slTransitionsTo = new HashMap<Integer, Collection<SLMove>>();
+		tsTransitionsFrom = new HashMap<Integer, Collection<TSMove>>();
+		tsTransitionsTo = new HashMap<Integer, Collection<TSMove>>();
 		maxStateId = 0;
 		initialState = 0;
 	}
@@ -45,7 +48,7 @@ public class CT{
 	 * Create an automaton (removes unreachable states)
 	 */
 	public static CT MkCT(
-			Collection<CTMove> transitions, 
+			Collection<CTMove> transitions,
 			Integer initialState,
 			Collection<Integer> finalStates,	
 			int numberOfCounters) {
@@ -81,7 +84,7 @@ public class CT{
 			for(Integer fr: states){
 				for(Integer to: states){
 					if(rr[fr][to][i-1]){
-						for(CTMove moveFromTo: transitionsFrom.get(to)){
+						for(SLMove moveFromTo: slTransitionsFrom.get(to)){
 							rr[fr][moveFromTo.to][i]=true;
 						}
 					}else{
@@ -117,9 +120,15 @@ public class CT{
 
 		states.add(transition.from);
 		states.add(transition.to);
-
-		getMovesFrom(transition.from).add(transition);
-		getMovesTo(transition.to).add(transition);
+		
+		if(transition instanceof SLMove){
+			getSLMovesFrom(transition.from).add((SLMove)transition);
+			getSLMovesTo(transition.to).add((SLMove)transition);
+		}
+		else{
+			getTSMovesFrom(transition.from).add((TSMove)transition);
+			getTSMovesTo(transition.to).add((TSMove)transition);
+		}
 	}
 
 	// ACCESORIES METHODS
@@ -129,11 +138,11 @@ public class CT{
 	/**
 	 * Returns the set of transitions from state <code>s</code>
 	 */
-	public Collection<CTMove> getMovesFrom(Integer state) {
-		Collection<CTMove> trset = transitionsFrom.get(state);
+	public Collection<SLMove> getSLMovesFrom(Integer state) {
+		Collection<SLMove> trset = slTransitionsFrom.get(state);
 		if (trset == null) {
-			trset = new HashSet<CTMove>();
-			transitionsFrom.put(state, trset);
+			trset = new HashSet<SLMove>();
+			slTransitionsFrom.put(state, trset);
 		}
 		return trset;
 	}
@@ -141,22 +150,22 @@ public class CT{
 	/**
 	 * Returns the set of transitions starting set of states
 	 */
-	public Collection<CTMove> getMovesFrom(
+	public Collection<SLMove> getSLMovesFrom(
 			Collection<Integer> stateSet) {
-		Collection<CTMove> transitions = new LinkedList<CTMove>();
+		Collection<SLMove> transitions = new LinkedList<SLMove>();
 		for (Integer state : stateSet)
-			transitions.addAll(getMovesFrom(state));
+			transitions.addAll(getSLMovesFrom(state));
 		return transitions;
 	}
 
 	/**
 	 * Returns the set of input transitions to state <code>s</code>
 	 */
-	public Collection<CTMove> getMovesTo(Integer state) {
-		Collection<CTMove> trset = transitionsTo.get(state);
+	public Collection<SLMove> getSLMovesTo(Integer state) {
+		Collection<SLMove> trset = slTransitionsTo.get(state);
 		if (trset == null) {
-			trset = new HashSet<CTMove>();
-			transitionsTo.put(state, trset);
+			trset = new HashSet<SLMove>();
+			slTransitionsTo.put(state, trset);
 		}
 		return trset;
 	}
@@ -164,20 +173,60 @@ public class CT{
 	/**
 	 * Returns the set of transitions to set of states
 	 */
-	public Collection<CTMove> getMovesTo(
+	public Collection<SLMove> getTSMovesTo(
 			Collection<Integer> stateSet) {
-		Collection<CTMove> transitions = new LinkedList<CTMove>();
+		Collection<SLMove> transitions = new LinkedList<SLMove>();
 		for (Integer state : stateSet)
-			transitions.addAll(getMovesTo(state));
+			transitions.addAll(getSLMovesTo(state));
 		return transitions;
+	}
+	
+	/**
+	 * Returns the set of transitions from state <code>s</code>
+	 */
+	public Collection<TSMove> getTSMovesFrom(Integer state) {
+		Collection<TSMove> trset = tsTransitionsFrom.get(state);
+		if (trset == null) {
+			trset = new HashSet<TSMove>();
+			tsTransitionsFrom.put(state, trset);
+		}
+		return trset;
 	}
 
 	/**
 	 * Returns the set of transitions starting set of states
 	 */
-	public Collection<CTMove> getTransitions() {
-		return getMovesFrom(states);
+	public Collection<TSMove> getTSMovesFrom(
+			Collection<Integer> stateSet) {
+		Collection<TSMove> transitions = new LinkedList<TSMove>();
+		for (Integer state : stateSet)
+			transitions.addAll(getTSMovesFrom(state));
+		return transitions;
 	}
+
+	/**
+	 * Returns the set of input transitions to state <code>s</code>
+	 */
+	public Collection<TSMove> getTSMovesTo(Integer state) {
+		Collection<TSMove> trset = tsTransitionsTo.get(state);
+		if (trset == null) {
+			trset = new HashSet<TSMove>();
+			tsTransitionsTo.put(state, trset);
+		}
+		return trset;
+	}
+
+	/**
+	 * Returns the set of transitions to set of states
+	 */
+	public Collection<SLMove> getSLMovesTo(
+			Collection<Integer> stateSet) {
+		Collection<SLMove> transitions = new LinkedList<SLMove>();
+		for (Integer state : stateSet)
+			transitions.addAll(getSLMovesTo(state));
+		return transitions;
+	}
+
 
 	@Override
 	public Object clone() {
