@@ -6,7 +6,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 public class CT{
@@ -18,7 +20,7 @@ public class CT{
 	protected int totCounters;
 	protected Integer maxStateId;
 
-	protected Collection<Integer> counters;
+	protected Collection<Integer> variables;
 	protected int numberOfCounters;
 	
 	// Moves are inputs or epsilon
@@ -26,9 +28,12 @@ public class CT{
 	protected Map<Integer, Collection<SLMove>> slTransitionsTo;
 	
 	// Moves are inputs or epsilon
-		protected Map<Integer, Collection<TSMove>> tsTransitionsFrom;
-		protected Map<Integer, Collection<TSMove>> tsTransitionsTo;
+	protected Map<Integer, Collection<TSMove>> tsTransitionsFrom;
+	protected Map<Integer, Collection<TSMove>> tsTransitionsTo;
 
+	
+	Map<Integer, HashSet<Integer>> influenceRel = new HashMap<>();
+		
 	public Integer stateCount() {
 		return states.size();
 	}
@@ -102,10 +107,41 @@ public class CT{
 		return rrFinal;
 	}
 	
-	public boolean[][] getDecrementReachabilityRelation(){
-		//TODO need to figure this one out
+	public void getInfluenceRelation(){
+		// at each state what variable values still matter
 		
-		return null;
+		for(Integer state: states)
+			influenceRel.put(state, new HashSet<Integer>());
+		
+		for(TSMove tsmove: getTSMoves()){
+			//TODO More than just 0 tested
+			Set<Integer> aliveVars = tsmove.get0TestedVars();			
+			influenceRelRec(aliveVars, tsmove.from, new HashSet<Integer>());			
+		}
+		
+	}
+	
+	private void influenceRelRec(
+			Set<Integer> aliveVarsAtCurrState,
+			Integer currState,
+			Set<Integer> visited		
+			){
+		influenceRel.get(currState).addAll(aliveVarsAtCurrState);
+		if(!visited.contains(currState)){
+			visited.add(currState);		
+			//SL move don't change much
+			for(SLMove move: getSLMovesTo(currState))
+				influenceRelRec(aliveVarsAtCurrState,move.from,visited);
+			//TS move have to check what keeps flowing
+			for(TSMove move: getTSMovesTo(currState)){
+				HashSet<Integer> res = move.getResetVars();
+				HashSet<Integer> zt = move.get0TestedVars();
+				HashSet<Integer> rem =  new HashSet<Integer>(aliveVarsAtCurrState);
+				rem.removeAll(res);
+				rem.removeAll(zt);
+				influenceRelRec(aliveVarsAtCurrState,move.from,visited);
+			}
+		}
 	}
 	
 	/**
@@ -173,6 +209,21 @@ public class CT{
 	/**
 	 * Returns the set of transitions to set of states
 	 */
+	public Collection<SLMove> getSLMovesTo(
+			Collection<Integer> stateSet) {
+		Collection<SLMove> transitions = new LinkedList<SLMove>();
+		for (Integer state : stateSet)
+			transitions.addAll(getSLMovesTo(state));
+		return transitions;
+	}
+
+	public Collection<SLMove> getSLMoves() {
+		return getSLMovesFrom(states);
+	}
+	
+	/**
+	 * Returns the set of transitions to set of states
+	 */
 	public Collection<SLMove> getTSMovesTo(
 			Collection<Integer> stateSet) {
 		Collection<SLMove> transitions = new LinkedList<SLMove>();
@@ -214,18 +265,13 @@ public class CT{
 			tsTransitionsTo.put(state, trset);
 		}
 		return trset;
+	}	
+	
+	public Collection<TSMove> getTSMoves() {
+		return getTSMovesFrom(states);
 	}
-
-	/**
-	 * Returns the set of transitions to set of states
-	 */
-	public Collection<SLMove> getSLMovesTo(
-			Collection<Integer> stateSet) {
-		Collection<SLMove> transitions = new LinkedList<SLMove>();
-		for (Integer state : stateSet)
-			transitions.addAll(getSLMovesTo(state));
-		return transitions;
-	}
+	
+	
 
 
 	@Override
