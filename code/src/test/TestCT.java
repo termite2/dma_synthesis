@@ -20,8 +20,7 @@ public class TestCT {
 	public void testInfluenceRel() {
 				
 		int initialState = 1;
-		HashSet<Integer> finalStates = new HashSet<>();
-		finalStates.add(3);
+		int finalState=3;
 		
 		HashSet<Integer> variables = new HashSet<>();
 		variables.add(0);
@@ -34,7 +33,6 @@ public class TestCT {
 		HashSet<Integer> test0x2 = new HashSet<>();
 		test0x2.add(2);
 		
-		HashMap<Integer,Integer> testmapem = new HashMap<>();
 		HashSet<Integer> testx1n = new HashSet<Integer>();
 		testx1n.add(1);
 		
@@ -56,9 +54,7 @@ public class TestCT {
 		transitions.add(new SLMove(5, 51, null));
 		transitions.add(new TZeroMove(51, 2, test0x2));
 		
-		CT ct = CT.MkCT(transitions, initialState, finalStates, variables);
-		
-		ct.getInfluenceRelation();			
+		CT ct = CT.MkCT(transitions, initialState, finalState, variables);		
 		
 		System.out.println("done");
 	}

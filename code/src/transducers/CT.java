@@ -16,7 +16,7 @@ import sun.nio.cs.ext.DoubleByte.Decoder_EBCDIC;
 public class CT{
 
 	protected Collection<Integer> states;
-	protected Collection<Integer> finalStates;
+	protected Integer finalState;
 	protected Integer initialState;
 
 	protected int totCounters;
@@ -34,7 +34,7 @@ public class CT{
 	protected Map<Integer, Collection<TMove>> tTransitionsTo;
 
 	
-	Map<Integer, HashSet<Integer>> influenceRel = new HashMap<>();
+	Map<Integer, HashSet<Integer>> aliveVars = new HashMap<>();
 	Map<Integer, Map<Integer, HashSet<Integer>> > dependenceRel = new HashMap<>();
 		
 	public Integer stateCount() {
@@ -50,7 +50,7 @@ public class CT{
 		tTransitionsTo = new HashMap<Integer, Collection<TMove>>();
 		maxStateId = 0;
 		initialState = 0;
-		influenceRel = new HashMap<Integer, HashSet<Integer>>();
+		aliveVars = new HashMap<Integer, HashSet<Integer>>();
 	}
 
 	/*
@@ -59,8 +59,8 @@ public class CT{
 	public static CT MkCT(
 			Collection<CTMove> transitions,
 			Integer initialState,
-			Collection<Integer> finalStates,	
-			HashSet<Integer> variables) {
+			int finalState,	
+			Collection<Integer> variables2) {
 
 		CT aut = new CT();
 
@@ -68,18 +68,19 @@ public class CT{
 		aut.initialState = initialState;
 		aut.states = new HashSet<Integer>();
 		aut.states.add(initialState);
-		aut.states.addAll(finalStates);
-		aut.finalStates=finalStates;
-		aut.variables = variables;
+		aut.states.add(finalState);
+		aut.finalState=finalState;
+		aut.variables = variables2;
 
 		for (CTMove t : transitions)
 			aut.addTransition(t);
 
+		aut.computeInfluenceRelation();
 		return aut;
 	}
 	
-	public boolean[][] getReachabilityRelation(){
-		//TODO make sure states are indexed in correct way
+	public boolean[][] getReachabilityRelation(HashSet<Integer> variables){
+		//reachability modulo aliveVars
 		int n = maxStateId+1;
 		//Can go from i to j in k steps
 		boolean[][][] rr = new boolean[n][n][n+1]; 
@@ -87,17 +88,18 @@ public class CT{
 		for(Integer fr: states)
 			for(Integer to: states)
 				for(int i = 0;i<n+1;i++)
-					rr[fr][to][i]=(fr==to);
+					rr[fr][to][i]=(fr==to && variables.contains(fr));
 		
 		for(int i = 1;i<n+1;i++){
 			for(Integer fr: states){
 				for(Integer to: states){
 					if(rr[fr][to][i-1]){
-						for(SLMove moveFromTo: slTransitionsFrom.get(to)){
-							rr[fr][moveFromTo.to][i]=true;
-						}
-					}else{
 						rr[fr][to][i]=true;
+					}else{
+						for(SLMove moveFromTo: slTransitionsFrom.get(to)){
+							if(variables.contains(moveFromTo.to))
+								rr[fr][moveFromTo.to][i]=true;								
+						}
 					}					
 				}					
 			}
@@ -111,11 +113,13 @@ public class CT{
 		return rrFinal;
 	}
 	
-	public void getInfluenceRelation(){
+	
+	
+	private void computeInfluenceRelation(){
 		// at each state what variable values still matter
 		
 		for(Integer state: states){
-			influenceRel.put(state, new HashSet<Integer>());
+			aliveVars.put(state, new HashSet<Integer>());
 			HashMap<Integer, HashSet<Integer>> m = new HashMap<>();
 			for(Integer var: variables)
 				m.put(var, new HashSet<>());
@@ -132,6 +136,7 @@ public class CT{
 		
 	}
 	
+	//TODO what if there are multiple transitions? Do variables stay alive?
 	private void influenceRelRec(
 			Set<Integer> aliveVarsAtCurrState,
 			Map<Integer,HashSet<Integer>> dependenceAtState,
@@ -142,7 +147,7 @@ public class CT{
 		if(aliveVarsAtCurrState.isEmpty())
 			return;					
 		//add alives to set of alive
-		influenceRel.get(currState).addAll(aliveVarsAtCurrState);
+		aliveVars.get(currState).addAll(aliveVarsAtCurrState);
 		
 		//Add new deps to already computed
 		Map<Integer,HashSet<Integer>> depSoFar =  dependenceRel.get(currState);		
@@ -182,6 +187,136 @@ public class CT{
 			}
 		}
 	}
+	
+	public SemiLinearSet solveReachability(){
+		//TODO update touched states properly
+		HashSet<Integer> alVars = aliveVars.get(finalState);
+		
+		//Go backwards and remove cycles
+		int newInitialState = initialState;
+		int newFinal = finalState;
+		HashSet<Integer> newVariables = new HashSet<>(variables);
+		List<CTMove> transitions = new LinkedList<>();
+		int freshName = maxStateId+1;
+		
+		HashSet<Integer> visited = new HashSet<>();
+		LinkedList<Integer> toVisit = new LinkedList<>();
+		toVisit.add(finalState);
+		//TODO will have to do something about touched states
+		HashSet<Integer> touchedStates = new HashSet<>();
+		while(!toVisit.isEmpty())
+		{
+			int currState = toVisit.removeFirst();	
+			visited.add(currState);
+			//remove loops and replace				
+			CT subGraph = extractCycleGraph(currState, null);
+			
+			SemiLinearSet sumSubGraph = null; //TODO this should be the 0 summary for all vars
+			if(subGraph.states.size()==1){
+				sumSubGraph = subGraph.solveReachability();
+			}
+			//Create new state
+			int newState = freshName;
+			freshName++;
+			
+			//Edge replacing cycle
+			SLMove newMove = new SLMove(newState, currState, sumSubGraph);
+			transitions.add(newMove);
+			for(CTMove m: getMovesTo(currState)){
+				CTMove newM=copyMoveRepToWithSIfS1(m, newState, currState);
+				transitions.add(newM);
+				toVisit.add(m.from);
+			}
+		}
+		
+		CT linear = CT.MkCT(transitions, newInitialState, newFinal, variables);
+		
+		return linear.solveAcycGraph();
+	}
+	
+	private SemiLinearSet solveAcycGraph(){
+		return null;
+	}
+	
+	private CT extractCycleGraph(int state, HashSet<Integer> touchedStates){
+		
+		HashSet<Integer> alVars =  aliveVars.get(state);
+		
+		int newInitialState = maxStateId+1;
+		int newFinal = state;
+		HashSet<Integer> newVariables = new HashSet<>(variables);
+		List<CTMove> transitions = new LinkedList<>();
+		
+		HashSet<Integer> visited = new HashSet<>();
+		LinkedList<Integer> toVisit = new LinkedList<>();
+		toVisit.add(state);
+		while(!toVisit.isEmpty())
+		{
+			int currState = toVisit.removeFirst();	
+			visited.add(currState);
+			if(touchedStates.contains(currState)){
+				throw new IllegalArgumentException("loops are not in simple"
+						+ "form we can't currently solve this instance");
+			}
+			touchedStates.add(currState);
+			
+			boolean[][] rr = getReachabilityRelation(alVars);
+			for(CTMove m : getMovesFrom(currState)){
+				//TODO This part is tricky
+				if(rr[m.to][state]){
+					if(alVars.contains(m.to)){					
+						transitions.add(copyMoveRepFromWithSIfS1(m, newInitialState, state));
+					}
+				}
+			}					
+		}
+		touchedStates.remove(newInitialState);
+		CT summary = CT.MkCT(transitions, newInitialState, newFinal, newVariables);  
+		return summary;
+	}
+	
+	public CTMove copyMoveRepFromWithSIfS1(CTMove m, int s, int s1){
+		int newFrom = m.from==s1? s : s1; 
+		if(m instanceof SLMove){
+			SLMove sl = (SLMove) m;
+			return new SLMove(newFrom, sl.to, sl.s);
+		}
+		if(m instanceof TZeroMove){
+			TZeroMove sl = (TZeroMove) m;
+			return new TZeroMove(newFrom, sl.to, sl.eq0Test);
+		}
+		if(m instanceof FreeVarMove){
+			FreeVarMove sl = (FreeVarMove) m;
+			return new FreeVarMove(newFrom, sl.to, sl.geqFV, sl.setFV);
+		}
+		if(m instanceof SetConstMove){
+			SetConstMove sl = (SetConstMove) m;
+			return new SetConstMove(newFrom, sl.to, sl.setVars);
+		}
+		return null;
+	}
+	
+	public CTMove copyMoveRepToWithSIfS1(CTMove m, int s, int s1){
+		int newTo = m.to==s1? s : s1; 
+		if(m instanceof SLMove){
+			SLMove sl = (SLMove) m;
+			return new SLMove(sl.from, newTo, sl.s);
+		}
+		if(m instanceof TZeroMove){
+			TZeroMove sl = (TZeroMove) m;
+			return new TZeroMove(sl.from, newTo, sl.eq0Test);
+		}
+		if(m instanceof FreeVarMove){
+			FreeVarMove sl = (FreeVarMove) m;
+			return new FreeVarMove(sl.from, newTo, sl.geqFV, sl.setFV);
+		}
+		if(m instanceof SetConstMove){
+			SetConstMove sl = (SetConstMove) m;
+			return new SetConstMove(sl.from, newTo, sl.setVars);
+		}
+		return null;
+	}
+		
 	
 	/**
 	 * Add Transition
@@ -310,7 +445,23 @@ public class CT{
 		return getTMovesFrom(states);
 	}
 	
+	public Collection<CTMove> getMovesTo(int state) {
+		Collection<CTMove> trset = new LinkedList<>();
+		for(TMove m: getTMovesTo(state))
+			trset.add(m);
+		for(SLMove m: getSLMovesTo(state))
+			trset.add(m);
+		return trset;
+	}
 	
+	public Collection<CTMove> getMovesFrom(int state) {
+		Collection<CTMove> trset = new LinkedList<>();
+		for(TMove m: getTMovesFrom(state))
+			trset.add(m);
+		for(SLMove m: getSLMovesFrom(state))
+			trset.add(m);
+		return trset;
+	}
 
 
 	@Override
