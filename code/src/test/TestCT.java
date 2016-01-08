@@ -10,7 +10,9 @@ import org.junit.Test;
 import transducers.CT;
 import transducers.CTMove;
 import transducers.SLMove;
-import transducers.TSMove;
+import transducers.SetConstMove;
+import transducers.FreeVarMove;
+import transducers.TZeroMove;
 
 public class TestCT {
 
@@ -26,33 +28,33 @@ public class TestCT {
 		variables.add(1);
 		variables.add(2);
 		
-		HashSet<Integer> test0em = new HashSet<>();
+		HashSet<Integer> empHS = new HashSet<>();
 		HashSet<Integer> test0x0 = new HashSet<>();
 		test0x0.add(0);
 		HashSet<Integer> test0x2 = new HashSet<>();
 		test0x2.add(2);
 		
 		HashMap<Integer,Integer> testmapem = new HashMap<>();
-		HashMap<Integer,Integer> testx1n = new HashMap<>();
-		testx1n.put(1, TSMove.freshVar);
+		HashSet<Integer> testx1n = new HashSet<Integer>();
+		testx1n.add(1);
 		
-		HashMap<Integer,Integer> setnone = new HashMap<>();
-		HashMap<Integer,Integer> setx0fv = new HashMap<>();
-		setx0fv.put(0, TSMove.freshVar);
-		HashMap<Integer,Integer> setx1max = new HashMap<>();
-		setx1max.put(1, 1200);
 		
-		HashMap<Integer,Integer> setx2n = new HashMap<>();
-		setx2n.put(2, TSMove.freshVar);
+		HashSet<Integer>  setx0fv = new HashSet<Integer>();
+		setx0fv.add(0);
+		HashMap<Integer,Integer>   setx1max = new HashMap<Integer,Integer> ();
+		setx1max.put(1,1000);
+		
+		HashSet<Integer> setx2n = new HashSet<Integer>();
+		setx2n.add(2);
 		
 		List<CTMove> transitions = new LinkedList<>();
-		transitions.add(new TSMove(1, 2, test0em, testmapem, setx0fv));
-		transitions.add(new TSMove(2, 3, test0x0, testmapem, setnone));
-		transitions.add(new TSMove(2, 4, test0em, testmapem, setx1max));
+		transitions.add(new FreeVarMove(1, 2, empHS, setx0fv));
+		transitions.add(new TZeroMove(2, 3, test0x0));
+		transitions.add(new SetConstMove(2, 4, setx1max));
 		transitions.add(new SLMove(4, 41, null));
-		transitions.add(new TSMove(41, 5, test0em, testx1n, setx2n));
+		transitions.add(new FreeVarMove(41, 5, testx1n, setx2n));
 		transitions.add(new SLMove(5, 51, null));
-		transitions.add(new TSMove(51, 2, test0x2, testmapem, setnone));
+		transitions.add(new TZeroMove(51, 2, test0x2));
 		
 		CT ct = CT.MkCT(transitions, initialState, finalStates, variables);
 		

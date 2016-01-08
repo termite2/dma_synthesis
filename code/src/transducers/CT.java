@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import sun.nio.cs.ext.DoubleByte.Decoder_EBCDIC;
+
 
 public class CT{
 
@@ -28,11 +30,12 @@ public class CT{
 	protected Map<Integer, Collection<SLMove>> slTransitionsTo;
 	
 	// Moves are inputs or epsilon
-	protected Map<Integer, Collection<TSMove>> tsTransitionsFrom;
-	protected Map<Integer, Collection<TSMove>> tsTransitionsTo;
+	protected Map<Integer, Collection<TMove>> tTransitionsFrom;
+	protected Map<Integer, Collection<TMove>> tTransitionsTo;
 
 	
 	Map<Integer, HashSet<Integer>> influenceRel = new HashMap<>();
+	Map<Integer, Map<Integer, HashSet<Integer>> > dependenceRel = new HashMap<>();
 		
 	public Integer stateCount() {
 		return states.size();
@@ -43,8 +46,8 @@ public class CT{
 		states = new HashSet<Integer>();
 		slTransitionsFrom = new HashMap<Integer, Collection<SLMove>>();
 		slTransitionsTo = new HashMap<Integer, Collection<SLMove>>();
-		tsTransitionsFrom = new HashMap<Integer, Collection<TSMove>>();
-		tsTransitionsTo = new HashMap<Integer, Collection<TSMove>>();
+		tTransitionsFrom = new HashMap<Integer, Collection<TMove>>();
+		tTransitionsTo = new HashMap<Integer, Collection<TMove>>();
 		maxStateId = 0;
 		initialState = 0;
 		influenceRel = new HashMap<Integer, HashSet<Integer>>();
@@ -111,35 +114,71 @@ public class CT{
 	public void getInfluenceRelation(){
 		// at each state what variable values still matter
 		
-		for(Integer state: states)
+		for(Integer state: states){
 			influenceRel.put(state, new HashSet<Integer>());
+			HashMap<Integer, HashSet<Integer>> m = new HashMap<>();
+			for(Integer var: variables)
+				m.put(var, new HashSet<>());
+			dependenceRel.put(state, m);
+		}
 		
-		for(TSMove tsmove: getTSMoves()){
-			Set<Integer> aliveVars = tsmove.getAliveVarsAtFrom();			
-			influenceRelRec(aliveVars, tsmove.from, new HashSet<Integer>());			
+		for(TMove tmove: getTMoves()){
+			Set<Integer> aliveVars = tmove.getAliveVarsAtFrom();
+			Map<Integer,HashSet<Integer>> depRel = tmove.getDepRel();
+			//If >0 some other transition will compute it
+			if(depRel.keySet().size()==0)
+				influenceRelRec(aliveVars, depRel, tmove.from, new HashSet<Integer>());			
 		}
 		
 	}
 	
 	private void influenceRelRec(
 			Set<Integer> aliveVarsAtCurrState,
+			Map<Integer,HashSet<Integer>> dependenceAtState,
 			Integer currState,
 			Set<Integer> visited		
 			){
+		//this checks that no variables should be tracked anymore
 		if(aliveVarsAtCurrState.isEmpty())
-			return;
+			return;					
+		//add alives to set of alive
 		influenceRel.get(currState).addAll(aliveVarsAtCurrState);
+		
+		//Add new deps to already computed
+		Map<Integer,HashSet<Integer>> depSoFar =  dependenceRel.get(currState);		
+		for(int variable: dependenceAtState.keySet())
+			depSoFar.get(variable).addAll(dependenceAtState.get(variable));
+		
 		if(!visited.contains(currState)){
 			visited.add(currState);		
-			//SL move don't change much
+			//SL move don't change anything and propagate to from state
 			for(SLMove move: getSLMovesTo(currState))
-				influenceRelRec(aliveVarsAtCurrState,move.from,visited);
+				influenceRelRec(aliveVarsAtCurrState, dependenceAtState, move.from,visited);				
+			
 			//TS move have to check what keeps flowing
-			for(TSMove move: getTSMovesTo(currState)){
+			for(TMove move: getTMovesTo(currState)){
 				HashSet<Integer> bl = move.getBlockedVars();
-				HashSet<Integer> rem =  new HashSet<Integer>(aliveVarsAtCurrState);
-				rem.removeAll(bl);
-				influenceRelRec(rem,move.from,visited);
+				HashSet<Integer> aliveAtFrom =  new HashSet<Integer>(aliveVarsAtCurrState);
+				aliveAtFrom.removeAll(bl);
+				aliveAtFrom.addAll(move.getAliveVarsAtFrom());
+				
+				Map<Integer,HashSet<Integer>> depAtFrom =  new HashMap<Integer, HashSet<Integer>>();
+				Map<Integer,HashSet<Integer>> depOfMove =  move.getDepRel();
+				for(int variable: variables){
+					HashSet<Integer> depV = new HashSet<>();
+					if(dependenceAtState.containsKey(variable)){
+						for(int v : dependenceAtState.get(variable))
+							if(aliveAtFrom.contains(v))
+								depV.add(v);
+					}
+					if(depOfMove.containsKey(variable))
+						depV.addAll(depOfMove.get(variable));
+					if(!depV.isEmpty())
+						depAtFrom.put(variable, depV);
+				}
+					
+				
+				influenceRelRec(aliveAtFrom,depAtFrom,move.from,visited);
 			}
 		}
 	}
@@ -162,8 +201,8 @@ public class CT{
 			getSLMovesTo(transition.to).add((SLMove)transition);
 		}
 		else{
-			getTSMovesFrom(transition.from).add((TSMove)transition);
-			getTSMovesTo(transition.to).add((TSMove)transition);
+			getTMovesFrom(transition.from).add((TMove)transition);
+			getTMovesTo(transition.to).add((TMove)transition);
 		}
 	}
 
@@ -224,7 +263,7 @@ public class CT{
 	/**
 	 * Returns the set of transitions to set of states
 	 */
-	public Collection<SLMove> getTSMovesTo(
+	public Collection<SLMove> getTMovesTo(
 			Collection<Integer> stateSet) {
 		Collection<SLMove> transitions = new LinkedList<SLMove>();
 		for (Integer state : stateSet)
@@ -235,11 +274,11 @@ public class CT{
 	/**
 	 * Returns the set of transitions from state <code>s</code>
 	 */
-	public Collection<TSMove> getTSMovesFrom(Integer state) {
-		Collection<TSMove> trset = tsTransitionsFrom.get(state);
+	public Collection<TMove> getTMovesFrom(Integer state) {
+		Collection<TMove> trset = tTransitionsFrom.get(state);
 		if (trset == null) {
-			trset = new HashSet<TSMove>();
-			tsTransitionsFrom.put(state, trset);
+			trset = new HashSet<TMove>();
+			tTransitionsFrom.put(state, trset);
 		}
 		return trset;
 	}
@@ -247,28 +286,28 @@ public class CT{
 	/**
 	 * Returns the set of transitions starting set of states
 	 */
-	public Collection<TSMove> getTSMovesFrom(
+	public Collection<TMove> getTMovesFrom(
 			Collection<Integer> stateSet) {
-		Collection<TSMove> transitions = new LinkedList<TSMove>();
+		Collection<TMove> transitions = new LinkedList<TMove>();
 		for (Integer state : stateSet)
-			transitions.addAll(getTSMovesFrom(state));
+			transitions.addAll(getTMovesFrom(state));
 		return transitions;
 	}
 
 	/**
 	 * Returns the set of input transitions to state <code>s</code>
 	 */
-	public Collection<TSMove> getTSMovesTo(Integer state) {
-		Collection<TSMove> trset = tsTransitionsTo.get(state);
+	public Collection<TMove> getTMovesTo(Integer state) {
+		Collection<TMove> trset = tTransitionsTo.get(state);
 		if (trset == null) {
-			trset = new HashSet<TSMove>();
-			tsTransitionsTo.put(state, trset);
+			trset = new HashSet<TMove>();
+			tTransitionsTo.put(state, trset);
 		}
 		return trset;
 	}	
 	
-	public Collection<TSMove> getTSMoves() {
-		return getTSMovesFrom(states);
+	public Collection<TMove> getTMoves() {
+		return getTMovesFrom(states);
 	}
 	
 	

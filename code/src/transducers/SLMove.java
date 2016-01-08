@@ -16,4 +16,15 @@ public class SLMove extends CTMove{
 		return this;
 	}
 
+	
+	@Override
+	public String toString(){	
+		StringBuilder sb = new StringBuilder();
+		sb.append(from);
+		sb.append(" -");
+		sb.append("SL");			
+		sb.append("-> ");
+		sb.append(to);
+		return sb.toString();
+	}
 }
