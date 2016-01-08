@@ -2,7 +2,6 @@ package transducers;
 
 public class SLMove extends CTMove{
 
-	int from, to;		
 	SemiLinearSet s;	
 		
 	public SLMove(int from, int to, SemiLinearSet s) {

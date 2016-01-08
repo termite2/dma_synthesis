@@ -47,6 +47,7 @@ public class CT{
 		tsTransitionsTo = new HashMap<Integer, Collection<TSMove>>();
 		maxStateId = 0;
 		initialState = 0;
+		influenceRel = new HashMap<Integer, HashSet<Integer>>();
 	}
 
 	/*
@@ -56,7 +57,7 @@ public class CT{
 			Collection<CTMove> transitions,
 			Integer initialState,
 			Collection<Integer> finalStates,	
-			int numberOfCounters) {
+			HashSet<Integer> variables) {
 
 		CT aut = new CT();
 
@@ -66,7 +67,7 @@ public class CT{
 		aut.states.add(initialState);
 		aut.states.addAll(finalStates);
 		aut.finalStates=finalStates;
-		aut.numberOfCounters = numberOfCounters;
+		aut.variables = variables;
 
 		for (CTMove t : transitions)
 			aut.addTransition(t);
@@ -114,8 +115,7 @@ public class CT{
 			influenceRel.put(state, new HashSet<Integer>());
 		
 		for(TSMove tsmove: getTSMoves()){
-			//TODO More than just 0 tested
-			Set<Integer> aliveVars = tsmove.get0TestedVars();			
+			Set<Integer> aliveVars = tsmove.getAliveVarsAtFrom();			
 			influenceRelRec(aliveVars, tsmove.from, new HashSet<Integer>());			
 		}
 		
@@ -126,6 +126,8 @@ public class CT{
 			Integer currState,
 			Set<Integer> visited		
 			){
+		if(aliveVarsAtCurrState.isEmpty())
+			return;
 		influenceRel.get(currState).addAll(aliveVarsAtCurrState);
 		if(!visited.contains(currState)){
 			visited.add(currState);		
@@ -134,12 +136,10 @@ public class CT{
 				influenceRelRec(aliveVarsAtCurrState,move.from,visited);
 			//TS move have to check what keeps flowing
 			for(TSMove move: getTSMovesTo(currState)){
-				HashSet<Integer> res = move.getResetVars();
-				HashSet<Integer> zt = move.get0TestedVars();
+				HashSet<Integer> bl = move.getBlockedVars();
 				HashSet<Integer> rem =  new HashSet<Integer>(aliveVarsAtCurrState);
-				rem.removeAll(res);
-				rem.removeAll(zt);
-				influenceRelRec(aliveVarsAtCurrState,move.from,visited);
+				rem.removeAll(bl);
+				influenceRelRec(rem,move.from,visited);
 			}
 		}
 	}

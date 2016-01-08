@@ -5,7 +5,7 @@ import java.util.HashSet;
 
 public class TSMove extends CTMove{
 
-	Integer freshVar;
+	public static final Integer freshVar=1000;
 	
 	HashSet<Integer> eq0Test;
 	
@@ -22,34 +22,38 @@ public class TSMove extends CTMove{
 		this.setVars = setVars;
 	}
 
-	public HashSet<Integer> get0TestedVars(){
-		return eq0Test;
-	}
-	
-	//Checks whether the fresh variable appears in any test
-	public boolean freshInLeftHandSide(){
-		for(Integer from : geqTest.keySet()){
-			Integer to = geqTest.get(from);
-			if(to== -freshVar){
-				return true;
-			}				
-		}
-		return false;
-	}
-	
-	//Returns variables that are effectively reset by this transition
-	// x=5 or
-	// x=r but r doesn't appear in a test
-	public HashSet<Integer> getResetVars(){
+	// Variables that if alive at TO won't follow through at FROM
+	public HashSet<Integer> getBlockedVars(){		
+		HashSet<Integer> testedAgainstF = testedAgainstFresh();
 		HashSet<Integer> vars = new HashSet<>();
 		for(Integer from : setVars.keySet()){
 			Integer to = setVars.get(from);
 			if(to<0){
-				if(!freshInLeftHandSide())
-					vars.add(from);
+				//x=f and no y.y>=f in guard => add y
+				if(testedAgainstF.isEmpty() && to!=-freshVar)
+					vars.addAll(testedAgainstF);
 			}else{
 				vars.add(from);
 			}
+		}
+		return vars;
+	}
+	
+	//Variable that matter at from (those tested)
+	public HashSet<Integer> getAliveVarsAtFrom(){
+		HashSet<Integer> vars = new HashSet<>(eq0Test);
+		vars.addAll(geqTest.keySet());
+		return vars;
+	}
+	
+	//Checks whether the fresh variable appears in any test
+	public HashSet<Integer> testedAgainstFresh(){
+		HashSet<Integer> vars = new HashSet<>();
+		for(Integer from : geqTest.keySet()){
+			Integer to = geqTest.get(from);
+			if(to== -freshVar){
+				vars.add(from);
+			}				
 		}
 		return vars;
 	}
@@ -60,4 +64,9 @@ public class TSMove extends CTMove{
 		return this;
 	}
 
+	@Override
+	public String toString(){	
+		return from + " -"+ "-"+to;
+	}
+	
 }
